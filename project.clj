@@ -5,5 +5,6 @@
     :jvm-opts ["-Xmx6g"] ; "-Xss16m"
     :javac-options ["-g"]
     :source-paths ["src"]
-;   :main mandane.core
-    :aliases {"mandane" ["run" "-m" "mandane.core"]})
+    :main mandane.core
+    :aliases {"mandane" ["run" "-m" "mandane.core"]}
+    :bootclasspath true)

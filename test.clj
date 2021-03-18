@@ -1,85 +1,4 @@
-(ns mandane.core
-    (:refer-clojure :only [*ns* *print-length* .. intern])
-)
-
-(ns mandane.bore
-    (:refer-clojure :only [*in* *out*])
-    (:require [clojure.core :as -])
-)
-
-(-/defmacro refer! [ns s]
-    (-/let [f (-/fn [%] (-/let [v (-/ns-resolve (-/the-ns ns) %) n (-/vary-meta % -/merge (-/select-keys (-/meta v) [:macro]))] `(def ~n ~(-/var-get v))))]
-        (if (-/symbol? s) (f s) (-/cons 'do (-/map f s)))
-    )
-)
-
-(refer! clojure.core [+ - = aget alength and apply aset atom case char char? cond conj cons declare defmacro defn deref false? first fn fn? identical? int let list long long-array loop memoize neg? next nil? not number? or seq seq? seqable? sequential? slurp str string? swap! symbol symbol? the-ns time true? var? when with-in-str])
-
-(defn &throw! [& s] (throw (Error. (apply str s))))
-
-(defn &bits [s] (char (Long/parseLong (if (number? s) (str s) s), 2)))
-(def  &bits?     char?)
-(def  &bits=     =)
-
-(defn &zero  []       (char 0))
-(defn &zero? [x] (= x (char 0)))
-
-(defn &inc [x] (char (+ (long x) 1)))
-(defn &dec [x] (char (- (long x) 1)))
-
-(defn &read   [_]   (let [x (.read *in*)] (when (not (neg? x)) (char x))))
-(defn &unread [_ c] (.unread *in*, (int c)))
-(defn &append [_ x] (.append *out*, x) _)
-(defn &flush  [_]   (.flush *out*) _)
-
-(defn &identical? [x y] (cond (and (char? x) (char? y)) (= x y) (and (number? x) (number? y)) (= x y) 'else (identical? x y)))
-
-(defn -var-find [s] (.findInternedVar (the-ns 'mandane.core), (symbol s)))
-(defn -var-get  [v] (.get v))
-
-(def Mandane'ram (long-array (+ 16777216 16777216 16777216)))
-(def Mandane'gc (atom (alength Mandane'ram)))
-
-(defn &anew [n] (let [a (swap! Mandane'gc - n)] (if (neg? a) (&throw! "ram non più at " a) a)))
-
-(defn &aget [a i]
-    (let [x (aget Mandane'ram (+ a i))]
-        (case x -65537 nil -65538 false -65539 true (if (neg? x) (char (- 0 x 1)) x))
-    )
-)
-
-(defn &aset [a i x]
-    (let [x (cond (nil? x) -65537 (false? x) -65538 (true? x) -65539 (char? x) (- 0 (long x) 1) 'else x)]
-        (aset Mandane'ram (+ a i) x)
-    )
-)
-
-(defn &car [s] (&aget s 1))
-(defn &cdr [s] (&aget s 2))
-
-(defn &volatile-cas-cdr! [a x y] (when (&identical? (&aget a 2) x) (&aset a 2 y) a))
-(defn &volatile-get-cdr  [a]     (&aget a 2))
-(defn &volatile-set-cdr! [a x]   (&aset a 2 x) a)
-
-(defn &cons  [car cdr] (let [a (&anew 3)] (&aset a 0 false) (&aset a 1 car) (&aset a 2 cdr) a))
-(defn &meta  [car cdr] (let [a (&anew 3)] (&aset a 0 true)  (&aset a 1 car) (&aset a 2 cdr) a))
-(defn &meta! [car cdr] (let [a (&anew 3)] (&aset a 0 true)  (&aset a 1 car) (&volatile-set-cdr! a cdr)))
-
-(def &array? number?)
-
-(defn &cons? [x] (and (&array? x) (not (&aget x 0))))
-(defn &meta? [x] (and (&array? x)      (&aget x 0)))
-
-(ns mandane.core
-    (:refer-clojure :only [])
-    (:require [mandane.bore :as -])
-)
-
-(-/refer! mandane.bore [and &append &bits &bits? &bits= &car &cdr cond &cons &cons? &dec declare defn &flush fn &identical? &inc let loop &meta &meta! &meta? or &read &throw! &unread &volatile-cas-cdr! &volatile-get-cdr &volatile-set-cdr! when &zero &zero?])
-
-(defn -eager! [s] (if (-/fn? s) (-/apply s nil) s))
-
-(-/defmacro lazy-seq [& s] (-/list '-eager! (-/cons 'fn (-/cons [] s))))
+(do
 
 (def &'list              (&bits '1110000000000000))
 (def &'string            (&bits '1110000000000001))
@@ -120,100 +39,7 @@
 (def &'volatile-set-cdr! (&bits '1110000000100110))
 (def &'throw!            (&bits '1110000000100111))
 
-(defn &1 [s] (&car                   s))
-(defn &2 [s] (&car             (&cdr s)))
-(defn &3 [s] (&car       (&cdr (&cdr s))))
-(defn &4 [s] (&car (&cdr (&cdr (&cdr s)))))
-
-(defn &0 [i s] (if (&zero? i) (&car s) (#_recur &0 (&dec i) (&cdr s))))
-
-(defn -string! [s] (-/apply -/str ((fn f [s] (when s (-/cons (&car s) (f (&cdr s))))) (&cdr s))))
-
-(defn &eval [e m]
-    (loop [e e m m]
-        (if (&meta? e)
-            (let [a (&car e) s (&cdr e)]
-                (cond
-                    (&bits= a &'let)        (recur (&cdr s) (&cons (&eval (&car s) m) m))
-
-                    (&bits= a &'if)         (recur (if (&1 m) (&1 s) (&2 s)) (&cdr m))
-
-                    (&bits= a &'apply)
-                        (let [
-                            s
-                                (loop [i (&1 s) s nil m m]
-                                    (if (&zero? i)
-                                        s
-                                        (recur (&dec i) (&cons (&car m) s) (&cdr m))
-                                    )
-                                )
-                            c (&car s) s (&cdr s)
-                        ]
-                            (when (and (&meta? c) (&bits= (&car c) &'closure))
-                                (let [
-                                    g (&car (&cdr c)) n (&cdr (&cdr c))
-                                    n
-                                        (loop [n (if (&1 g) (&cons c n) n) p (&2 g) s s]
-                                            (if (&zero? p)
-                                                (if (&3 g) (&cons s n) n)
-                                                (recur (&cons (&car s) n) (&dec p) (&cdr s))
-                                            )
-                                        )
-                                ]
-                                    (recur (&4 g) n)
-                                )
-                            )
-                        )
-
-                    (&bits= a &'fn)         (&meta &'closure (&cons s m))
-
-                    (&bits= a &'quote)      (&1 s)
-
-                    (&bits= a &'binding)    (&0 (&1 s) m)
-
-                    (&bits= a &'var-get)    (&volatile-get-cdr (&1 s))
-                    (&bits= a &'var-set!)   (let [_ (&volatile-set-cdr! (&1 s) (&1 m))] nil)
-
-                    (&bits= a &'bits)       (&bits (-string! (&1 m)))
-                    (&bits= a &'bits?)      (&bits? (&1 m))
-                    (&bits= a &'bits=)      (&bits= (&2 m) (&1 m))
-
-                    (&bits= a &'zero)       (&zero)
-                    (&bits= a &'zero?)      (&zero? (&1 m))
-
-                    (&bits= a &'inc)        (&inc (&1 m))
-                    (&bits= a &'dec)        (&dec (&1 m))
-
-                    (&bits= a &'identical?) (&identical? (&2 m) (&1 m))
-
-                    (&bits= a &'read)       (&read (&1 m))
-                    (&bits= a &'unread)     (&unread (&2 m) (&1 m))
-                    (&bits= a &'append)     (&append (&2 m) (&1 m))
-                    (&bits= a &'flush)      (&flush (&1 m))
-
-                    (&bits= a &'car)        (&car (&1 m))
-                    (&bits= a &'cdr)        (&cdr (&1 m))
-
-                    (&bits= a &'cons?)      (&cons? (&1 m))
-                    (&bits= a &'meta?)      (&meta? (&1 m))
-
-                    (&bits= a &'cons)       (&cons (&2 m) (&1 m))
-                    (&bits= a &'meta)       (&meta (&2 m) (&1 m))
-                    (&bits= a &'meta!)      (&meta! (&2 m) (&1 m))
-
-                    (&bits= a &'volatile-cas-cdr!) (&volatile-cas-cdr! (&3 m) (&2 m) (&1 m))
-                    (&bits= a &'volatile-get-cdr)  (&volatile-get-cdr (&1 m))
-                    (&bits= a &'volatile-set-cdr!) (&volatile-set-cdr! (&2 m) (&1 m))
-
-                    (&bits= a &'throw!)     (&throw! "oops!")
-
-                    'else                   e
-                )
-            )
-            e
-        )
-    )
-)
+(defn &eval [e m] "asap!")
 
 (defn identical? [x y] (&identical? x y))
 
@@ -239,9 +65,6 @@
         (string? s)    (String''seq s)
         (symbol? s)    (Symbol''seq s)
         (closure? s)   (Closure''seq s)
-        (-/seqable? s) (-/seq s)
-        (-/symbol? s)  (-/seq (-/str s))
-        (-/fn? s)      (-/apply s nil)
         'else          (&throw! "seq not supported on " s)
     )
 )
@@ -253,7 +76,6 @@
         (cond
             (nil? s)    nil
             (cons? s)  (Cons''first s)
-            (-/seq? s) (-/first s)
             'else      (&throw! "first not supported on " s)
         )
     )
@@ -266,7 +88,6 @@
         (cond
             (nil? s)    nil
             (cons? s)  (Cons''next s)
-            (-/seq? s) (-/next s)
             'else      (&throw! "next not supported on " s)
         )
     )
@@ -310,7 +131,6 @@
 (defn deref [a]
     (cond
         (atom? a)  (Atom''deref a)
-        (-/var? a) (-/-var-get a)
         'else      (&throw! "deref not supported on " a)
     )
 )
@@ -345,7 +165,7 @@
 
 (declare reverse)
 
-(defn cons [x s] (Cons'new x, (if (-/seq? s) (reverse (reverse s)) s)))
+(defn cons [x s] (Cons'new x, s))
 
 (defn cons* [x & s] (cons x s))
 
@@ -355,13 +175,13 @@
     (cond
         (nil? s)         nil
         (nil? (next s)) (seq (first s))
-        'else           ((if (-/seq? s) -/cons cons) (first s) (spread (next s)))
+        'else           (cons (first s) (spread (next s)))
     )
 )
 
 (defn reverse [s] (reduce conj nil s))
 
-(defn list [& s] (List'new (if (-/seq? s) (reverse (reverse s)) s)))
+(defn list [& s] (List'new s))
 
 (defn some [f s]
     (let [s (seq s)]
@@ -470,7 +290,7 @@
 
 (defn String''equals [this, that]
     (or (identical? this that)
-        (and (or (string? that) (-/string? that))
+        (and (string? that)
             (= (seq this) (seq that))
         )
     )
@@ -484,13 +304,13 @@
 
 (defn Symbol''equals [this, that]
     (or (identical? this that)
-        (and (or (symbol? that) (-/symbol? that))
+        (and (symbol? that)
             (= (seq this) (seq that))
         )
     )
 )
 
-(let [f (-/memoize (fn [s] (Symbol'new (reverse (reverse (-/str s))))))] (defn ! [s] (if (-/symbol? s) (f s) s)))
+(defn ! [s] s)
 
 (defn bits [s] (&bits s))
 
@@ -615,7 +435,6 @@
         (cond
             (closure? f) (Closure''apply f, s)
             (atom? f)    (#_recur apply (deref f) s)
-            (-/fn? f)    (-/apply f (if (-/seq? s) s (reduce -/conj (-/list) (reverse s))))
             'else        (&throw! "apply not supported on " f)
         )
     )
@@ -628,12 +447,7 @@
 )
 
 (defn Var'find [s]
-    (or
-        (get (deref Mandane'ns) s)
-        (when (and (= (first s) Unicode'minus) (= (second s) Unicode'slash))
-            (-/-var-find (apply -/str (next (next s))))
-        )
-    )
+    (get (deref Mandane'ns) s)
 )
 
 (defn Var'lookup [s]
@@ -659,7 +473,7 @@
 
 (defn Sequential''equals [this, that]
     (or (identical? this that)
-        (and (or (sequential? that) (-/sequential? that))
+        (and (sequential? that)
             (loop [s (seq this) z (seq that)]
                 (if (some? s)
                     (and (some? z) (= (first s) (first z)) (recur (next s) (next z)))
@@ -675,9 +489,9 @@
         (cond
             (or (nil? x) (true? x) (false? x))      false
             (bits? x)                              (&bits= x y)
-            (or (sequential? x) (-/sequential? x)) (Sequential''equals x, y)
-            (or (string? x)     (-/string? x))     (String''equals x, y)
-            (or (symbol? x)     (-/symbol? x))     (Symbol''equals x, y)
+            (sequential? x) (Sequential''equals x, y)
+            (string? x)         (String''equals x, y)
+            (symbol? x)         (Symbol''equals x, y)
             'else                                  (&throw! "= not supported on " x)
         )
     )
@@ -690,7 +504,7 @@
     (let [f'append (if (atom? a) (fn [%1 %2] (&append %1 %2)) conj)]
         (cond
             (bits? x)                                  (f'append a x)
-            (or (string? x) (-/string? x) (symbol? x)) (reduce f'append a x)
+            (or (string? x) (symbol? x)) (reduce f'append a x)
             'else                                      (&throw! "append' not supported for " x)
         )
     )
@@ -754,16 +568,12 @@
         (symbol? x)     (append-sym a x)
         (atom? x)       (append' a "atom")
         (closure? x)    (append' a "closure")
-        (-/seq? x)      (append' a "-seq")
-        (-/string? x)   (append' a "-string")
-        (-/symbol? x)   (append' a "-symbol")
-        (-/fn? x)       (append' a "-fn")
         'else           (&throw! "append not supported on " x)
     )
 )
 
 (defn append! [a x]
-    (if (or (bits? x) (string? x) (-/string? x)) (append' a x) (append a x))
+    (if (or (bits? x) (string? x)) (append' a x) (append a x))
 )
 
 (defn str [& s]
@@ -1001,7 +811,7 @@
 
 (defn Compiler'analyze [form, scope]
     (cond
-        (or (and (list? form) (seq form)) (cons? form) (and (-/seq? form) (-/seq form)))
+        (or (and (list? form) (seq form)) (cons? form))
             (let [
                 f'macro (Compiler'macro (first form))
                 me (if (some? f'macro) (apply f'macro (next form)) form)
@@ -1265,13 +1075,10 @@
 (defn read [] (Reader'read Mandane'in, nil, nil))
 
 (defn repl []
-    (let [esc Unicode'escape] (print (str esc "[31mMandane " esc "[32m=> " esc "[0m")))
+    (let [esc Unicode'escape] (print (str esc "[33mMandane " esc "[32m=> " esc "[0m")))
     (flush)
-    (prn (eval (read)))
+    (pr (eval (read))) (newline) (flush)
     (#_recur repl)
 )
 
-(defn -main [& _]
-    (-/with-in-str (-/slurp "test.clj") (eval (read)))
-    (repl)
 )
