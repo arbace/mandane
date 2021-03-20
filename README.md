@@ -2,6 +2,7 @@
 Functional Lisp Hypervisor for Apple Silicon M*
 
 [![Build Status](https://travis-ci.com/arbace/mandane.svg?branch=main)](https://travis-ci.com/github/arbace/mandane)
+[![Stake to support us](https://badge.devprotocol.xyz/0x95938Cd132BA64e4702d791E8750Efc0a510043E/descriptive)](https://stakes.social/0x95938Cd132BA64e4702d791E8750Efc0a510043E)
 #### bare metal research playground, a synergetic aggregation of prior pathfinder studies, including
 - [arbace](https://github.com/bodza/arbace)
 - [beagle](https://github.com/bodza/beagle)
